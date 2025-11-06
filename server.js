@@ -7,7 +7,8 @@ app.use(cors());
 app.use(express.json());
 
 // ✅ Direct MongoDB connection string (bypasses env)
-const MONGO_URI = "mongodb+srv://atharav1402singh_db_user:Atharav1246singh@kytecluster.j5kpge9.mongodb.net/?appName=KyteCluster";
+const MONGO_URI = process.env.MONGO_URI || "fallback";
+console.log("🔍 Checking MONGO_URI:", MONGO_URI);
 
 // ✅ Connect to MongoDB
 mongoose.connect(MONGO_URI, {
