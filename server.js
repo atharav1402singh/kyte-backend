@@ -1,32 +1,23 @@
-import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-mongoose.connect(process.env.MONGO_URI)
-
-
-dotenv.config();
+import express from "express";
+import cors from "cors";
 
 const app = express();
-
-// middlewares
+app.use(cors());
 app.use(express.json());
 
-// routes
-app.get("/", (req, res) => {
-  res.send("✅ Kyte backend deployed successfully!");
-});
+// ✅ Direct MongoDB connection string (bypasses env)
+const MONGO_URI = "mongodb+srv://atharav1402singh_db_user:Atharav1246singh@kytecluster.j5kpge9.mongodb.net/?appName=KyteCluster";
 
-// connect to MongoDB
-mongoose
-  .connect(process.env.MONGODB_URI)
+// ✅ Connect to MongoDB
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB connection failed", err));
 
-// PORT handling (important for Railway)
-const PORT = process.env.PORT || 5001;
+app.get("/", (req, res) => res.send("Backend is working fine!"));
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
-
-  
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
