@@ -21,4 +21,11 @@ mongoose.connect(MONGO_URI, {
 app.get("/", (req, res) => res.send("Backend is working fine!"));
 
 const PORT = process.env.PORT || 8080;
+app.get("/test", (req, res) => {
+  res.json({
+    message: "✅ Your API is working perfectly!",
+    database: "MongoDB connected",
+  });
+});
+
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
