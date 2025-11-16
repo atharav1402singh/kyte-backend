@@ -23,17 +23,22 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "http://localhost:5173",
+      "http://localhost:5001",
       "https://kyte-frontend-ui.vercel.app",
+      "https://kyte-frontend-ui.vercel.app/",
+      "https://pretty-charisma-production.up.railway.app",
+      "*"
     ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
 
+
 app.use(express.json());
 
 // ------------ CONFIG ------------
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 8080;
 const MONGO_URI = process.env.MONGO_URI;
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
