@@ -1,116 +1,125 @@
-// ✅ Import dependencies
+// server.js
 import express from "express";
-import mongoose from "mongoose";
+import http from "http";
 import cors from "cors";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import dotenv from "dotenv";
-import User from "./models/User.js"; // Make sure this file exists
+import Razorpay from "razorpay";
+import { Server } from "socket.io";
 
-// ✅ Initialize dotenv (loads .env variables)
+// load .env
 dotenv.config();
 
-// ✅ Create express app
+// middleware import (static imports must be at top)
+
+
+// create app AFTER imports
 const app = express();
-app.use(cors());
+
+// use request logger AFTER app is created
+
+// ------------ CORS ------------
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://kyte-frontend-ui.vercel.app",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
-// ✅ MongoDB connection
-const PORT = process.env.PORT || 8080;
-const MONGO_URI =
-  process.env.MONGO_URI ||
-  "mongodb+srv://atharav1402singh_db_user:Atharav1246singh@kytecluster.j5kpge9.mongodb.net/?appName=KyteCluster";
+// ------------ CONFIG ------------
+const PORT = process.env.PORT || 5001;
+const MONGO_URI = process.env.MONGO_URI;
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
+// ------------ MONGO CONNECT ------------
+console.log("MONGO_URI:", MONGO_URI);
 mongoose
   .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("✅ Connected to MongoDB"))
-  .catch((err) => console.error("❌ MongoDB connection failed", err));
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.error("❌ MongoDB Error:", err.message));
 
-// ✅ Default route
-app.get("/", (req, res) => {
-  res.send("Backend is working fine!");
+// ------------ RAZORPAY ------------
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
 });
 
-// ✅ Signup route
-app.post("/signup", async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ message: "User already exists" });
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Save user
-    const newUser = new User({ name, email, password: hashedPassword });
-    await newUser.save();
-
-    res.status(201).json({ message: "User created successfully" });
-  } catch (error) {
-    console.error("Signup error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+// ------------ SOCKET.IO ------------
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://kyte-frontend-ui.vercel.app",
+    ],
+    methods: ["GET", "POST"],
+  },
 });
 
-// ✅ Login route
-app.post("/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+// make io available in routes
+app.locals.io = io;
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "User not found" });
+io.on("connection", (socket) => {
+  console.log("🟢 Socket connected:", socket.id);
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(400).json({ message: "Invalid credentials" });
+  // Broadcast GPS
+  socket.on("driverLocation", (loc) => io.emit("updateDriverLocation", loc));
+  socket.on("customerLocation", (loc) => io.emit("updateCustomerLocation", loc));
 
-    const token = jwt.sign({ id: user._id }, "SECRET_KEY", { expiresIn: "1d" });
-    res.json({ message: "Login successful", token });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  // Ride rooms
+  socket.on("join:ride", ({ rideId } = {}) => {
+    if (!rideId) return;
+    socket.join(`ride_${rideId}`);
+  });
+
+  // Driver rooms
+  socket.on("join:driver", ({ driverId } = {}) => {
+    if (!driverId) return;
+    socket.join(`driver_${driverId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("🔴 Socket disconnected:", socket.id);
+  });
 });
 
-// ✅ Token verification middleware
-function verifyToken(req, res, next) {
-  const header = req.headers["authorization"]; // or "Authorization"
-  console.log("🟡 Received Token:", header); // Debug log
+// ------------ ROUTES ------------
+import paymentRoutes from "./routes/paymentRoutes.js";
+import rideRoutes from "./routes/rideRoutes.js";
+import fareRoutes from "./routes/fareRoutes.js";
 
-  if (!header)
-    return res.status(401).json({ message: "Access Denied: No token provided" });
+app.use("/api/payment", paymentRoutes);
+app.use("/api/rides", rideRoutes);
+app.use("/api/fare", fareRoutes);
 
-  // Support both raw and Bearer tokens
-  const token = header.startsWith("Bearer ")
-    ? header.slice(7)
-    : header;
-
-  try {
-    const decoded = jwt.verify(token, "SECRET_KEY");
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error("Token verify failed:", err.message);
-    return res.status(403).json({ message: "Invalid or expired token" });
-  }
-}
-
-// ✅ Auth-check route (protected)
-app.get("/auth-check", verifyToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select("-password");
-    res.json({
-      message: "✅ Token is valid",
-      user,
-    });
-  } catch (error) {
-    console.error("Auth check error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+// ------------ BASIC ENDPOINTS ------------
+app.get("/api", (req, res) => {
+  res.json({ success: true, message: "Kyte Backend Running 🚀" });
 });
 
-// ✅ Start server
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.get("/api/razorpay/key", (req, res) => {
+  res.json({ success: true, key: RAZORPAY_KEY_ID });
+});
+
+// ------------ GLOBAL ERROR ------------
+app.use((err, req, res, next) => {
+  console.error("🔥 GLOBAL ERROR:", err);
+  res.status(500).json({
+    success: false,
+    message: "Internal Server Error",
+    error: err?.message || String(err),
+  });
+});
+
+// ------------ START ------------
+server.listen(PORT, () => {
+  console.log(`🚀 Kyte Backend Live on ${PORT}`);
+});
